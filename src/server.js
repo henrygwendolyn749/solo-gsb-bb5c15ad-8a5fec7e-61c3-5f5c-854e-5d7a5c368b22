@@ -47,6 +47,13 @@ const {
   MAX_INPUT_TURNS,
   MAX_REMAINING,
 } = require('./lifetime');
+const {
+  validateBacklashInput,
+  planBacklash,
+  MAX_STAGES: MAX_BACKLASH_STAGES,
+  MAX_FRAC_DEN,
+  MAX_FRAC_VALUE,
+} = require('./backlash');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -97,6 +104,11 @@ app.get('/resonance', (_req, res) => {
 /** 友好访问双档寿命核算页：/lifetime → /lifetime.html */
 app.get('/lifetime', (_req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'lifetime.html'));
+});
+
+/** 友好访问反向空程预算页：/backlash → /backlash.html */
+app.get('/backlash', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'backlash.html'));
 });
 
 /** BigInt 分数安全转为有限小数（用于前端展示） */
@@ -947,6 +959,53 @@ app.post('/api/lifetime', (req, res) => {
   });
 });
 
+app.post('/api/backlash', (req, res) => {
+  const checked = validateBacklashInput(req.body);
+  if (!checked.ok) return res.status(400).json({ error: checked.error });
+  const { stages, expected } = checked;
+
+  // 各级齿隙 × 后续级速比合成输出轴总空程区间 → 求保证达到期望输出的最少正整数输入圈数
+  const result = planBacklash(stages, expected);
+
+  res.json({
+    stageCount: result.stageCount,
+    axisCount: result.axisCount,
+    maxStages: MAX_BACKLASH_STAGES,
+    maxFracDen: MAX_FRAC_DEN.toString(),
+    maxFracValue: MAX_FRAC_VALUE.toString(),
+    stages: result.stages.map((st) => ({
+      stage: st.stage,
+      driveTeeth: st.driveTeeth,
+      drivenTeeth: st.drivenTeeth,
+      stageRatio: serializeFrac(st.stageRatio),
+      backlashLow: serializeFrac(st.backlashLow),
+      backlashHigh: serializeFrac(st.backlashHigh),
+      downstreamFactor: serializeFrac(st.downstreamFactor),
+      foldedLow: serializeFrac(st.foldedLow),
+      foldedHigh: serializeFrac(st.foldedHigh),
+    })),
+    totalRatio: serializeFrac(result.totalRatio),
+    expectedTurns: serializeFrac(result.expected),
+    backlashTotal: {
+      low: serializeFrac(result.backlashLow),
+      high: serializeFrac(result.backlashHigh),
+    },
+    minTurns: result.minTurns.toString(),
+    outputAtMin: {
+      low: serializeFrac(result.output.low),
+      high: serializeFrac(result.output.high),
+    },
+    previousTurns: result.previousTurns.toString(),
+    outputAtPrevious: {
+      low: serializeFrac(result.previousOutput.low),
+      high: serializeFrac(result.previousOutput.high),
+    },
+    guaranteed: result.guaranteed,
+    previousGuaranteed: result.previousGuaranteed,
+    message: result.message,
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`齿轮组选配服务已启动： http://localhost:${PORT}`);
   console.log(`  单台选配： http://localhost:${PORT}/`);
@@ -959,4 +1018,5 @@ app.listen(PORT, () => {
   console.log(`  转速异常定位： http://localhost:${PORT}/diagnose`);
   console.log(`  装配校准： http://localhost:${PORT}/phase-reset`);
   console.log(`  共振避让： http://localhost:${PORT}/resonance`);
+  console.log(`  反向空程预算： http://localhost:${PORT}/backlash`);
 });

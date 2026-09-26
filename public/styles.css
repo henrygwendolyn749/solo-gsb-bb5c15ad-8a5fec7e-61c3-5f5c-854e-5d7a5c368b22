@@ -33,6 +33,7 @@ body {
 
 .top-nav {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
   margin-bottom: 14px;
@@ -436,6 +437,28 @@ table.diag-cand-table td { vertical-align: middle; }
 @media (max-width: 640px) {
   .forbid-grid-head,
   .forbid-row { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---------------- 反向空程预算 ---------------- */
+
+.backlash-grid-head,
+.backlash-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1.1fr 1.1fr 44px;
+  gap: 10px;
+  align-items: center;
+}
+.backlash-grid-head {
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.backlash-row { margin-bottom: 8px; }
+.backlash-index { font-size: 13px; font-weight: 600; color: var(--brand-dark); white-space: nowrap; }
+@media (max-width: 640px) {
+  .backlash-grid-head { display: none; }
+  .backlash-row { grid-template-columns: 1fr 1fr; }
+  .backlash-index { grid-column: 1 / -1; }
 }
 
 /* ---------------- 装配校准 ---------------- */
