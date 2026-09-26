@@ -78,6 +78,15 @@
 得到全部齿轮均不超限时**最多可完整执行的计划轮数**（恰好达到限额视为可执行），
 并展示**逐轮消耗**、**执行后余量**与**共同限制的齿轮**；零轮时明确说明受限原因。
 
+再支持**反向空程预算**：录入已装好的 **1～3 级**传动各级**主动 / 从动齿数**，
+每级另填**从动轴侧反转齿隙的非负分数闭区间**（分数或小数均可，无齿隙填 0），
+并输入**期望的正分数输出转数**。系统以**精确分数**把每级齿隙乘以**后续级速比**
+折算到输出轴，逐级相加合成**输出轴总空程区间** [B_lo, B_hi]；输入轴反转 N 圈后的
+实际输出转数区间为 **[max(0, N×总速比 − B_hi), max(0, N×总速比 − B_lo)]**。
+按最坏情况（下界）达标求**保证输出至少达到期望转数的最少正整数输入圈数**
+N = ⌈(期望 + B_hi) / 总速比⌉，并展示**各级折算空程**、**总区间**、
+该圈数下的**输出区间**与少转 1 圈时的保证下界（说明最少性）。
+
 ## 一键启动（Docker Compose，自动安装依赖并构建）
 
 ```bash
@@ -98,6 +107,7 @@ docker compose up --build
 | 转速异常定位（转数观测 / 倍率定位） | **http://localhost:3000/diagnose**（或 `/diagnose.html`） |
 | 装配校准（相位回零 / 模同余合并） | **http://localhost:3000/phase-reset**（或 `/phase-reset.html`） |
 | 共振避让转速（禁用带反推 / 安全区间推荐） | **http://localhost:3000/resonance**（或 `/resonance.html`） |
+| 反向空程预算（齿隙折算 / 最少反转圈数） | **http://localhost:3000/backlash**（或 `/backlash.html`） |
 
 后台运行可用 `docker compose up --build -d`，停止用 `docker compose down`。
 
@@ -114,7 +124,8 @@ npm start
 缺齿补货页 http://localhost:3000/procure ，双档换速页 http://localhost:3000/dual-speed ，
 寿命核算页 http://localhost:3000/lifetime ，带载安全选配页 http://localhost:3000/torque ，
 轴位装配页 http://localhost:3000/layout ，转速异常定位页 http://localhost:3000/diagnose ，
-装配校准页 http://localhost:3000/phase-reset ，共振避让转速页 http://localhost:3000/resonance 。
+装配校准页 http://localhost:3000/phase-reset ，共振避让转速页 http://localhost:3000/resonance ，
+反向空程预算页 http://localhost:3000/backlash 。
 
 ## 必要配置（环境变量）
 
@@ -123,12 +134,13 @@ npm start
 | `PORT` | 容器内服务监听端口（一般无需修改） | `3000` |
 | `APP_PORT` | Compose 映射到宿主机的端口，按需覆盖，例如 `APP_PORT=8080 docker compose up --build` | `3000` |
 
-两个变量控制同一服务端口，十个页面共用；例如改用宿主机 8080 端口后，访问
+两个变量控制同一服务端口，十一个页面共用；例如改用宿主机 8080 端口后，访问
 http://localhost:8080 （单台）、http://localhost:8080/batch （批量）、
 http://localhost:8080/procure （缺齿补货）、http://localhost:8080/dual-speed （双档换速）、
 http://localhost:8080/lifetime （寿命核算）、http://localhost:8080/torque （带载安全）、
 http://localhost:8080/layout （轴位装配）、http://localhost:8080/diagnose （转速异常定位）、
-http://localhost:8080/phase-reset （装配校准）与 http://localhost:8080/resonance （共振避让转速）：
+http://localhost:8080/phase-reset （装配校准）、http://localhost:8080/resonance （共振避让转速）
+与 http://localhost:8080/backlash （反向空程预算）：
 
 ```bash
 APP_PORT=8080 docker compose up --build
@@ -423,6 +435,40 @@ APP_PORT=8080 docker compose up --build
      （累计消耗、余量，“恰好用尽”单独标注）。
 7. **零轮时明确说明受限原因**：列出每轮消耗已超过其剩余允许转数、
    连 1 轮都无法完整执行的齿轮（每轮消耗 vs 剩余允许转数）。
+
+## 使用说明 — 反向空程预算
+
+1. 在顶部导航进入 **空程预算**（`/backlash`）。
+2. 按 **输入轴 → 输出轴** 的顺序录入已装好的 **1～3 级**齿轮：每级填写
+   **主动齿数 / 从动齿数**（1～100000 的正整数），系统据此以精确分数计算
+   本级速比（主动/从动）与总速比 R = ∏(主动/从动)。
+3. 每级另填**从动轴侧反转齿隙闭区间** [下限, 上限]（单位：该级从动轴转数）：
+   非负分数（如 `1/8`）或小数（如 `0.125`），下限 ≤ 上限，约分后分母 ≤ 10¹²；
+   无齿隙两端都填 `0`。
+4. 填写**期望输出转数**（正分数，如 `5`、`7/2`、`2.5`）：要求反转后输出轴
+   **至少**达到的转数（最坏情况也要达标）。
+5. 点击“计算空程预算”，系统：
+   - 把每级齿隙乘以**后续级速比** P_k = ∏_{j>k} r_j（末级为 1）折算到输出轴，
+     逐级相加合成**输出轴总空程区间** [B_lo, B_hi]（全程精确分数，无浮点误差）；
+   - 按最坏情况（输出下界）达标求**最少正整数输入圈数**
+     **N = ⌈(期望 + B_hi) / R⌉**（期望 > 0，故 N ≥ 1 恒成立）；
+   - 计算该圈数下的实际输出转数区间
+     **[max(0, N·R − B_hi), max(0, N·R − B_lo)]**。
+6. 结果区依次展示：
+   - **各级折算空程表**：本级速比、从动轴侧齿隙区间、后续级速比与折算到输出轴的空程区间；
+   - **总速比与总空程区间**：R、[B_lo, B_hi]、期望转数与达标所需理想转数（期望 + B_hi）；
+   - **最少输入圈数与输出区间**：N、理想输出 N·R、实际输出转数区间，
+     并给出**少转 1 圈时的保证下界**（低于期望转数，说明 N 的最少性）。
+
+### 反向空程预算的判定要点
+
+- 齿隙折算、总空程合成与圈数求解全部使用 **BigInt 精确分数**，无浮点误差；
+  圈数向上取整用整数 ⌈a/b⌉ 运算，端点是否达标与闭区间语义完全一致。
+- “保证达标”按**最坏情况**理解：空程取上界 B_hi 时输出最少，
+  故只需下界 max(0, N·R − B_hi) ≥ 期望转数；实际输出可能多走
+  （空程取下界 B_lo 时达到区间上界）。
+- 全部齿隙为 0 时总空程区间为 [0, 0]，输出区间退化为单点 N·R，
+  最少圈数即 ⌈期望 / R⌉。
 
 ## HTTP 接口
 
@@ -839,6 +885,46 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
     剩余允许转数，连 1 轮都无法完整执行）。
 - 逐轮消耗、余量与轮数求解全部使用 BigInt 精确分数 / 整数运算，无浮点误差。
 
+### `POST /api/backlash`（反向空程预算）
+
+```json
+{
+  "stages": [
+    { "driveTeeth": 20, "drivenTeeth": 40, "backlash": { "low": "1/8", "high": "1/4" } },
+    { "driveTeeth": 24, "drivenTeeth": 36, "backlash": { "low": "1/12", "high": "1/6" } }
+  ],
+  "expectedTurns": "5"
+}
+```
+
+上例总速比 1/3、总空程区间 [1/6, 1/3] 转：返回 `minInputTurns: "16"`
+（N = ⌈(5 + 1/3) ÷ 1/3⌉），该圈数下输出区间 `outputAtMin` 为 [5, 31/6] 转
+（下界恰好达标），`prevGuaranteed` 为 14/3（15 圈时最坏情况不达标）。
+
+- `stages` 必须为 **1～3** 级；每级 `driveTeeth` / `drivenTeeth` 为
+  **1～100000 的正整数**；每级 `backlash` 必须含 `low` / `high` 两个端点，
+  为该级**从动轴侧**反转齿隙（单位：该轴转数）——**非负分数**
+  （分数字符串如 `"1/8"` 或小数值如 `0.125`，无齿隙填 `0`），
+  `low ≤ high`，约分后分母 ≤ 10¹²、取值 ≤ 10¹² 转。
+- `expectedTurns` 为**期望输出转数**（**正分数**，写法同齿隙端点，必须大于 0，
+  取值 ≤ 10¹² 转）；参数非法返回 **400** 与明确错误。
+- 返回：
+  - `stages[]`：各级齿数、本级速比 `stageRatio`、从动轴侧齿隙区间 `backlash`、
+    后续级速比 `suffixRatio`（末级为 1）与折算到输出轴的空程区间 `converted`
+    （均为分数 + 小数）；
+  - `totalRatio`：总速比 R = ∏(主动/从动)；
+  - `totalBacklash`：输出轴总空程区间 `{low, high}`（各级折算空程逐级相加）；
+  - `expectedTurns` / `requiredMargin`：期望转数与达标所需理想转数（期望 + 空程上界）；
+  - `minInputTurns`：保证输出至少达到期望转数的**最少正整数输入圈数**
+    N = ⌈(期望 + B_hi) / R⌉（字符串，可能超过 JS 安全整数）；
+  - `idealOutput`：该圈数下的理想输出 N·R（分数 + 小数）；
+  - `outputAtMin`：该圈数下的实际输出转数区间
+    `[max(0, N·R − B_hi), max(0, N·R − B_lo)]`；
+  - `prevTurns` / `prevGuaranteed`：少转 1 圈（N−1 圈）的圈数与保证下界
+    （必低于期望转数，用于说明 N 的最少性）；
+  - `message`：面向页面的中文结论说明。
+- 全部计算使用 BigInt 精确分数与整数向上取整，无浮点误差。
+
 ## 计算与排序规则
 
 - 每级转速比 = 主动轮齿数 / 从动轮齿数；总速比 = 各级速比之积（全程约分分数）。
@@ -926,15 +1012,28 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
 - 执行后余量 = 剩余允许转数 − R × 每轮合计消耗（必为非负分数）；
   R = 0 时受限齿轮即每轮消耗已超过剩余允许转数的齿轮，逐枚列出说明。
 
+### 反向空程预算的空程折算与最少圈数
+
+- 本级速比 r_k = 主动齿 / 从动齿，总速比 R = ∏ r_k（BigInt 约分分数，无浮点误差）；
+- 第 k 级从动轴侧齿隙 [lo_k, hi_k]（该轴转数）折算到输出轴需乘以**后续级速比**
+  P_k = ∏_{j>k} r_j（末级 P = 1）；输出轴总空程区间为各级折算值逐级相加：
+  **B_lo = Σ lo_k·P_k，B_hi = Σ hi_k·P_k**；
+- 输入轴反转 N 圈（正整数）后输出先吃掉空程再传动，实际输出转数区间为
+  **[max(0, N·R − B_hi), max(0, N·R − B_lo)]**（空程越大输出越少，
+  最坏情况取下界）；
+- 保证输出至少达到期望转数 E ⟺ 下界达标 ⟺ N·R ≥ E + B_hi，
+  最少正整数圈数 **N = ⌈(E + B_hi) / R⌉**（整数向上取整，E > 0 故 N ≥ 1 恒成立）；
+  N−1 圈的保证下界 max(0, (N−1)·R − B_hi) 必小于 E，一并返回以说明最少性。
+
 ## 目录结构
 
 ```
 .
 ├── Dockerfile              # 多平台 Node 20 Alpine 镜像，构建时安装依赖
-├── docker-compose.yml      # 一键启动服务（十个页面同端口）
+├── docker-compose.yml      # 一键启动服务（十一个页面同端口）
 ├── package.json
 ├── src
-│   ├── server.js           # Express 服务：静态页面 + /api/search + /api/batch + /api/procure + /api/dual-speed + /api/lifetime + /api/torque + /api/layout + /api/diagnose + /api/phase-reset + /api/resonance
+│   ├── server.js           # Express 服务：静态页面 + /api/search + /api/batch + /api/procure + /api/dual-speed + /api/lifetime + /api/torque + /api/layout + /api/diagnose + /api/phase-reset + /api/resonance + /api/backlash
 │   ├── search.js           # 精确分数搜索算法（BigInt）：完整枚举与单台搜索
 │   ├── batch.js            # 批量装配：按集合留优 + 互不冲突组合的分支限界搜索
 │   ├── procure.js          # 缺齿补货：枚举可购子集，复用批量装配的候选分配与规则
@@ -944,7 +1043,8 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
 │   ├── layout.js           # 轴位装配：按轴距/模数穷举有向配对并跨级组合，精确分数校核总速比
 │   ├── diagnose.js         # 转速异常定位：读数误差区间→实测速比区间，逐级求跨观测恒定倍率区间并交叉核对
 │   ├── phase.js            # 装配校准：相位回零化为模同余，广义 CRT 合并与冲突轴定位
-│   └── resonance.js        # 共振避让：按齿数连乘求各轴倍率，禁用带反推整数输入区间，裁剪合并求安全区间与推荐
+│   ├── resonance.js        # 共振避让：按齿数连乘求各轴倍率，禁用带反推整数输入区间，裁剪合并求安全区间与推荐
+│   └── backlash.js         # 反向空程预算：各级齿隙 × 后续级速比合成输出轴总空程区间，求保证达标的最少输入圈数
 └── public
     ├── index.html          # 单台选配页面
     ├── batch.html          # 批量装配页面（/batch）
@@ -956,6 +1056,7 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
     ├── diagnose.html       # 转速异常定位页面（/diagnose）
     ├── phase-reset.html    # 装配校准页面（/phase-reset）
     ├── resonance.html      # 共振避让转速页面（/resonance）
+    ├── backlash.html       # 反向空程预算页面（/backlash）
     ├── styles.css
     ├── app.js              # 单台页脚本
     ├── batch.js            # 批量页脚本
@@ -966,5 +1067,6 @@ G2 / G3 每轮各消耗 35 转（120/6 + 90/6），单齿轮可执行 ⌊9010/35
     ├── layout.js           # 轴位装配页脚本
     ├── diagnose.js         # 转速异常定位页脚本
     ├── phase-reset.js      # 装配校准页脚本
-    └── resonance.js        # 共振避让转速页脚本
+    ├── resonance.js        # 共振避让转速页脚本
+    └── backlash.js         # 反向空程预算页脚本
 ```
